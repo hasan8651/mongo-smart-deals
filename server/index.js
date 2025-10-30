@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -28,37 +30,45 @@ async function run() {
 
     const db = client.db("smart_db");
     const productsCollection = db.collection("products");
-    // const bidsCollection = db.collection('bids');
-    //         const usersCollection = db.collection('users');
+    const bidsCollection = db.collection("bids");
+    const usersCollection = db.collection("users");
 
-    //         app.post('/users', async (req, res) => {
-    //             const newUser = req.body;
-    //             const email = req.body.email;
-    //             const query = { email: email }
-    //             const existingUser = await usersCollection.findOne(query);
-
-    //             if (existingUser) {
-    //                 res.send({message: 'user already exits. do not need to insert again'})
-    //             }
-    //             else {
-    //                 const result = await usersCollection.insertOne(newUser);
-    //                 res.send(result);
-    //             }
-    //         })
-
-    //      app.get('/products', async (req, res) => {
-    // const projectFields = { title: 1, price_min: 1, price_max: 1, image: 1 }
-    //             // const cursor = productsCollection.find().sort({ price_min: -1 }).skip(2).limit(2).project(projectFields);
-
-    //             console.log(req.query)
-    //             const email = req.query.email;
-    //             const query = {}
-    //             if (email) {
-    //                 query.email = email;
-    //             }
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+      const email = req.body.email;
+      const query = { email: email };
+      const existingUser = await usersCollection.findOne(query);
+      if (existingUser) {
+        res.send({
+          message: "user already exits. do not need to insert again",
+        });
+      } else {
+        const result = await usersCollection.insertOne(newUser);
+        res.send(result);
+      }
+    });
 
     app.get("/products", async (req, res) => {
+      console.log(req.query);
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.email = email;
+      }
       const cursor = productsCollection.find(query);
+      //   const projectFields = {
+      //     title: 1,
+      //     price_min: 1,
+      //     price_max: 1,
+      //     _id: 0,
+      //     image: 1,
+      //   };
+      //   const cursor = productsCollection
+      //     .find()
+      //     .sort({ price_min: 1 })
+      //     .skip(2)
+      //     .limit(5)
+      //     .project(projectFields);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -99,23 +109,23 @@ async function run() {
     });
 
     //         // bids related apis
-    //         app.get('/bids', async (req, res) => {
-    //             const email = req.query.email;
-    //             const query = {};
-    //             if (email) {
-    //                 query.buyer_email = email;
-    //             }
+    app.get("/bids", async (req, res) => {
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.buyer_email = email;
+      }
 
-    //             const cursor = bidsCollection.find(query);
-    //             const result = await cursor.toArray();
-    //             res.send(result);
-    //         })
+      const cursor = bidsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-    //         app.post('/bids', async (req, res) => {
-    //             const newBid = req.body;
-    //             const result = await bidsCollection.insertOne(newBid);
-    //             res.send(result);
-    //         })
+    app.post("/bids", async (req, res) => {
+      const newBid = req.body;
+      const result = await bidsCollection.insertOne(newBid);
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
