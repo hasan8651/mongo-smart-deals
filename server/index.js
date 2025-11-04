@@ -1,14 +1,68 @@
-require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
+// const jwt = require("jsonwebtoken");
+const admin = require("firebase-admin");
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
+
 const port = process.env.PORT || 5000;
+
+const serviceAccount = require("./smart-deals-firebase-admin-key.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 // middleware
 app.use(cors());
 app.use(express.json());
+
+// const logger = (req, res, next) => {
+//   console.log("logging information");
+//   next();
+// };
+
+const verifyFireBaseToken = async (req, res, next) => {
+  if (!req.headers.authorization) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = req.headers.authorization.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  //   // verify token
+  try {
+    const userInfo = await admin.auth().verifyIdToken(token);
+    req.token_email = userInfo.email;
+    console.log("after token validation", userInfo);
+    next();
+  } catch (error) {
+    console.log("invalid token");
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+};
+
+// const verifyJWTToken = (req, res, next) => {
+//   const authorization = req.headers.authorization;
+//   if (!authorization) {
+//     return res.status(401).send({ message: "unauthorized access" });
+//   }
+//   const token = authorization.split(" ")[1];
+//   if (!token) {
+//     return res.status(401).send({ message: "unauthorized access" });
+//   }
+
+//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+//     if (err) {
+//       return res.status(401).send({ message: "unauthorized access" });
+//     }
+//     // put it in the right place
+//     console.log("after decoded", decoded);
+//     req.token_email = decoded.email;
+//     next();
+//   });
+// };
 
 const uri = process.env.MONGO_URI;
 
@@ -32,6 +86,15 @@ async function run() {
     const productsCollection = db.collection("products");
     const bidsCollection = db.collection("bids");
     const usersCollection = db.collection("users");
+
+    // jwt related apis
+    // app.post("/getToken", (req, res) => {
+    //   const loggedUser = req.body;
+    //   const token = jwt.sign(loggedUser, process.env.JWT_SECRET, {
+    //     expiresIn: "1h",
+    //   });
+    //   res.send({ token: token });
+    // });
 
     app.get("/users", async (req, res) => {
       console.log(req.query);
@@ -99,7 +162,8 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/products", async (req, res) => {
+    app.post("/products", verifyFireBaseToken, async (req, res) => {
+      console.log("headers in the post ", req.headers);
       const newProduct = req.body;
       const result = await productsCollection.insertOne(newProduct);
       res.send(result);
@@ -128,11 +192,16 @@ async function run() {
     });
 
     //         // bids related apis
-    app.get("/bids", async (req, res) => {
+
+    app.get("/bids", verifyFireBaseToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
         query.buyer_email = email;
+        // verify user have access to see this data
+        if (email !== req.token_email) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
       }
 
       const cursor = bidsCollection.find(query);
@@ -140,24 +209,29 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/products/bids/:productId", async (req, res) => {
-      const productId = req.params.productId;
-      const query = { product: productId };
-      const cursor = bidsCollection.find(query).sort({ bid_price: -1 });
-      const result = await cursor.toArray();
-      res.send(result);
-    });
+    // verifyFireBaseToken,
+    app.get(
+      "/products/bids/:productId",
 
-    app.get("/bids", async (req, res) => {
-      const query = {};
-      if (query.email) {
-        query.buyer_email = email;
+      async (req, res) => {
+        const productId = req.params.productId;
+        const query = { product: productId };
+        const cursor = bidsCollection.find(query).sort({ bid_price: -1 });
+        const result = await cursor.toArray();
+        res.send(result);
       }
+    );
 
-      const cursor = bidsCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
-    });
+    // app.get("/bids", async (req, res) => {
+    //   const query = {};
+    //   if (query.email) {
+    //     query.buyer_email = email;
+    //   }
+
+    //   const cursor = bidsCollection.find(query);
+    //   const result = await cursor.toArray();
+    //   res.send(result);
+    // });
 
     app.post("/bids", async (req, res) => {
       const newBid = req.body;
